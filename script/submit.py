@@ -41,6 +41,13 @@ sys.path.insert(0,os.getcwd())
 print "inserting in path cwd/python"
 sys.path.insert(0,os.getcwd()+'/python')
 
+## bash color string
+red="\033[01;31m"
+green = "\033[01;32m"
+yellow = "\033[01;33m"
+cyan = "\033[01;36m"
+white = "\033[00m"
+
 def PrintLine(list):
 	''' convert list in list of int number, sort and compress consecutive numbers. Then print the result:
 	4,5,8,3 -> 3-5,8
@@ -81,13 +88,6 @@ def PrintSummary(dir, doPrint=True):
 	fail = glob(dir + "/*fail")
 	done = glob(dir + "/*done")
 	pend = glob(dir + "/*pend")
-
-	## bash color string
-	red="\033[01;31m"
-	green = "\033[01;32m"
-	yellow = "\033[01;33m"
-	cyan = "\033[01;36m"
-	white = "\033[00m"
 
 	run = [ re.sub('\.run','' , re.sub('.*/sub','', r) ) for r in run ] 	
 	fail = [ re.sub('\.fail','' , re.sub('.*/sub','', r) ) for r in fail ] 	
@@ -137,6 +137,10 @@ if opts.resubmit:
 			basedir = os.environ['PWD'] + "/" + opts.dir
 			touch = "touch " + basedir + "/sub%d.pend"%iJob
 			call(touch,shell=True)
+			cmd = "rm " + basedir + "/sub%d.fail"%iJob + " 2>&1 >/dev/null"
+			call(cmd,shell=True)
+			cmd = "rm " + basedir + "/sub%d.run"%iJob + " 2>&1 >/dev/null"
+			call(cmd,shell=True)
 			cmdline = "bsub -q " + opts.queue + " -o %s/log%d.txt"%(basedir,iJob) + " -J " + "%s/Job_%d"%(opts.dir,iJob) + " %s/sub%d.sh"%(basedir,iJob)
 			print cmdline
 			call (cmdline,shell=True)
@@ -162,6 +166,25 @@ cmdFile.write("##Commands used to submit on batch. Automatic written by python/s
 
 if opts.tar:
 	cmd=["tar","-czf","%s/package.tar.gz"%opts.dir]
+	if True: ## copy also the bare library in the tar. for grid submission
+		cmdBare = "mkdir -p ./bin/bare"
+		call(cmdBare,shell=True)
+		cmdBare = "cp " +os.environ["CMSSW_BASE"] + "/src/NeroProducer/Core/bin/libBare.so ./bin/bare/"
+		call(cmdBare,shell=True)
+		cmdBare = "cp " +os.environ["CMSSW_BASE"] + "/src/NeroProducer/Core/bin/dict_rdict.pcm ./bin/bare/"
+		call(cmdBare,shell=True)
+		## run time libraries needs also the .h files :(
+		cmdBare = "mkdir -p ./bin/interface"
+		call(cmdBare,shell=True)
+		cmdBare = "cp " + os.environ["CMSSW_BASE"] + "/src/NeroProducer/Core/interface/*hpp ./bin/interface/"
+		call(cmdBare,shell=True);
+		### this file is produced by make
+		#cmdBare = "cp bin/libChargedHiggs.so bin/libChargedHiggs.0.so"
+		#call(cmdBare,shell=True)
+		#cmdBare = "/afs/cern.ch/user/a/amarini/public/patchelf --set-rpath '' bin/libChargedHiggs.0.so"
+		#call(cmdBare,shell=True)
+	cmd.extend( glob("bin/bare/*" ) )
+	cmd.extend( glob("bin/interface/*" ) )
 	cmd.extend( glob("bin/*so" ) )
 	cmd.extend( glob("bin/dict*" ) )
 	#cmd.extend( glob("bin/tag.txt" ) )
@@ -169,7 +192,14 @@ if opts.tar:
 	cmd.extend( glob("dat/*txt" ) )
 	cmd.extend( glob("aux/*" ) )
 	cmd.extend( glob("python/*py") )
-	cmd.extend( glob("test/*") )
+	#cmd.extend( glob("test/*") )
+	cmd.extend( glob("test/*py") )
+	cmd.extend( glob("test/*C") )
+	cmd.extend( glob("test/*.hpp") )
+	cmd.extend( glob("test/*.cpp") )
+	cmd.extend( glob("test/*.o") )
+	cmd.extend( glob("test/*.so") )
+	cmd.extend( glob("test/*.exe") )
 	cmd.extend( glob("interface/*hpp" ) ) ## who is the genius that in ROOT6 need these at run time ? 
 	tarCmdline = " ".join(cmd)
 	print tarCmdline
@@ -217,23 +247,24 @@ for iJob in range(0,opts.njobs):
 	if opts.tar:
 		sh.write("mkdir -p $WORKDIR/%s_%d\n"%(opts.dir,iJob))
 		sh.write("cd $WORKDIR/%s_%d\n"%(opts.dir,iJob))
+		#sh.write('LD_LIBRARY_PATH=${PWD}:${PWD}/bin:$LD_LIBRARY_PATH\n') ## TODO: test
 		sh.write("tar -xzf %s/package.tar.gz\n"%(basedir ))
 		sh.write("mkdir -p %s\n"%opts.dir)
 		sh.write("cp %s/*dat %s/\n"%(basedir,opts.dir))
 
 	touch = "touch " + basedir + "/sub%d.pend"%iJob
 	call(touch,shell=True)
-	cmd = "rm " + basedir + "/sub%d.run 2>&1 >/dev/null"%iJob
+	cmd = "rm " + basedir + "/sub%d.run 2>&1 >/dev/null"%iJob + " 2>&1 >/dev/null"
 	call(cmd,shell=True)
-	cmd = "rm " + basedir + "/sub%d.done 2>&1 >/dev/null"%iJob
+	cmd = "rm " + basedir + "/sub%d.done 2>&1 >/dev/null"%iJob + " 2>&1 >/dev/null"
 	call(cmd,shell=True)
-	cmd = "rm " + basedir + "/sub%d.fail 2>&1 >/dev/null"%iJob
+	cmd = "rm " + basedir + "/sub%d.fail 2>&1 >/dev/null"%iJob + " 2>&1 >/dev/null"
 	call(cmd,shell=True)
 
 	sh.write('date > %s/sub%d.run\n'%(basedir,iJob))
-	sh.write('rm %s/sub%d.done\n'%(basedir,iJob))
-	sh.write('rm %s/sub%d.pend\n'%(basedir,iJob))
-	sh.write('rm %s/sub%d.fail\n'%(basedir,iJob))
+	sh.write('rm %s/sub%d.done 2>&1 >/dev/null\n'%(basedir,iJob))
+	sh.write('rm %s/sub%d.pend 2>&1 >/dev/null\n'%(basedir,iJob))
+	sh.write('rm %s/sub%d.fail 2>&1 >/dev/null\n'%(basedir,iJob))
 
 	if opts.mount:
 		#mountpoint = "~/eos"
@@ -273,7 +304,7 @@ for iJob in range(0,opts.njobs):
 		sh.write('EXITCODE=${PIPESTATUS[0]}\n')
 	else:
 		sh.write('EXITCODE=$?\n')
-	sh.write('rm %s/sub%d.run\n'%(basedir,iJob))
+	sh.write('rm %s/sub%d.run 2>&1 >/dev/null\n'%(basedir,iJob))
 	sh.write('[ $EXITCODE == 0 ] && touch %s/sub%d.done\n'%(basedir,iJob))
 	sh.write('[ $EXITCODE != 0 ] && echo $EXITCODE > %s/sub%d.fail\n'%(basedir,iJob))
 
@@ -287,6 +318,8 @@ for iJob in range(0,opts.njobs):
 			sh.write("[ $EXITCODE == 0 ] && mv -v %s/%s %s/\n"%(opts.dir,outname,basedir))
 		if opts.compress:
 			sh.write("mv %s/log%d.txt.gz %s/log%d.txt.gz\n"%(opts.dir,iJob,basedir,iJob) )
+	sh.write('echo "Finished At:"\n')
+	sh.write("date\n")
 	
 	dat=open("%s/input%d.dat"%(opts.dir,iJob),"w")
 	dat.write("include=%s\n"%opts.input)
@@ -303,7 +336,7 @@ for iJob in range(0,opts.njobs):
 	cmdFile.write(cmdline+"\n")
 
 	if len(splittedInput[iJob]) == 0 : 
-		print "No file to run on for job "+ str(iJob)+", will not send it!"
+		print "No file to run on for job "+ str(iJob)+"," + red + " will not send it!" + white
 		continue
 	if not opts.dryrun: 
 		call(cmdline,shell=True)

@@ -3,23 +3,32 @@
 
 #include "interface/Lepton.hpp"
 #include "interface/GenParticle.hpp"
+#include "interface/Trigger.hpp"
 
 class Tau: virtual public Object,
-    virtual public Lepton
+    virtual public Lepton,
+    virtual public Trigger
 {
-    float idcut_;
+    float etacut_; 
+    bool doEleRej_;
+    bool doMuRej_;
 
 
     public:
+    void SetEtaCut(float x){etacut_=x;}
+    void SetMuRej(bool x ) { doMuRej_ = x;}
+    void SetEleRej(bool x ) { doEleRej_ = x;}
+
     Tau() ;
-    float id;
+    bool id;
     float iso2;
-    int id_ele;
-    int id_mu;
+    bool id_ele =0;
+    bool id_mu =0 ;
     int match ; // is matched with a gen tau
 
-    virtual int IsTau() ;
-    virtual inline int IsObject(){ return IsTau(); }
+    virtual int IsTau() const ;
+    virtual int IsTauInvIso() const ;
+    inline int IsObject() const override{ return IsTau(); }
 
     virtual bool IsMatch( ) { if (match >= 0) return true; else return false;}
 
@@ -28,6 +37,20 @@ class Tau: virtual public Object,
         Object::clearSyst();
         }
 
+    // --- REGRESSION 
+    struct regression{
+        float nvtx; 
+        float tauPt;
+        float tauEta;
+        float tauM;
+        float tauQ;
+        float tauIso;
+        float tauIso2;
+        float tauChargedIsoPtSum;
+        float tauNeutralIsoPtSum;
+        float jetPt;
+        float jetEta;
+    } regVars_;
 };
 
 #endif

@@ -1,6 +1,21 @@
 import os,sys,re
 from subprocess import call,check_output
 
+
+def FindBasePath(verbose=False):
+     if verbose: print "-> Looking for basepath"
+     basepath = ""
+     mypath = os.path.abspath(os.getcwd())
+     while mypath != "" and mypath != "/":
+             if "ChargedHiggs" in os.path.basename(mypath):
+                     basepath = os.path.abspath(mypath)
+             mypath = os.path.dirname(mypath)
+
+     if verbose: print "-> Base Path is " + basepath
+     sys.path.insert(0,basepath)
+     sys.path.insert(0,"./")
+     return basepath
+
 def Default():
 	config = {}
 	config['config'] = {}
@@ -43,7 +58,13 @@ def vIntKey(value):
 def ParseDat(name):
 	''' Parse configuratino File '''
 	print "<-> Parsing input file", name
-	stream = open(name)
+
+	try:
+		stream = open(name)
+	except IOError:
+		base= FindBasePath() ## make sure to be able to open file correctly
+		stream = open( base +"/" + name) 
+
 	config = Default()
 	for line in stream:
 		l = line.split('#')[0]
@@ -63,6 +84,7 @@ def ParseDat(name):
 		if      key=='Files' \
 			or key == 'Analysis' \
 			or key == 'Smear'  \
+			or key == 'Correct'  \
 			or key == 'Branches': 
 			config[key] =  vStringKey(  value   )
 	
@@ -111,6 +133,15 @@ def FindEOS(name,mount=""):
 	cmd = EOS + ' find -f ' + name
 	print "Runnig command:",cmd
 	list = check_output(cmd ,shell=True).split()
+
+	# print removed
+	tot = len(list)
+	removed = [ f for f in list if '/failed/' in f ] 
+	for f in removed:
+		print "ParseDat.py - FindEOS: Ignoring failed file: '"+ f + "'"
+	# remove failed directories from crab submission
+	list = [ f  for f in list if '/failed/' not in f ]
+
 	if mount != "":
 		fileList = [ re.sub("/eos/cms", mount + "/cms",f) for f in list ]
 	else:
@@ -133,6 +164,7 @@ def PrintDat(config):
 		elif key =='Files' \
 			or key == 'Analysis' \
 			or key == 'Smear' \
+			or key == 'Correct' \
 			or key == 'Branches' :
 			print key, '=', ','.join(config[key])
 		######### V FLOAT/INT #########
@@ -159,6 +191,7 @@ def PrintUsage():
 	print 'branches = brancfile'
 	print 'Analysis = AnalysisBase,Analysis2 ..'
 	print 'Smears = @SmearBase,JER,JES'
+	print 'Correct = @CorrectorBase'
 	print 'config = AnalysisBase|a=1,b=2,c(3)'
 
 def ReadMCDB(file):
@@ -181,31 +214,53 @@ def ReadMCDB(file):
 
 def ReadSFDB(file):
 	'''read and parse the SFDB file:
-	    \t\t### LABEL dir Entries xSec
+	    \t\t### LABEL type -- -- --- --- 
 	'''
-	L=[]
+	L=[]## this is a list of sf bins
 	f = open(file)
 	for line in f:
+	   try:
 		l = line.split('#')[0]
+		l = l.replace('\n','') ## delete end of line
 		if l == "": continue
-		l=re.sub('^ *','',l)
+		l=re.sub('^ *','',l) ## remove space at the beginning
+		l=re.sub('\ +',' ',l) ## squeeze
+		if l == "": continue
 		label= l.split(' ')[0]
 		type= l.split(' ')[1]
 		R={}
 		R['label']= label
 		R['type'] = type
 
+		if label == 'include':
+			tmp = ReadSFDB(type)
+			#remove from L all the key with the same label as in tmp
+			labels = set([])
+			new = []
+			for key in tmp:
+				labels.add( key['label'])
+			for key in L:
+				if key['label'] not in labels:
+					new.append( key ) 
+			# merge L and tmp
+			L = new[:]
+
 		if type == 'pteta':
 			pt1  = float ( l.split(' ')[2] )
 			pt2  = float ( l.split(' ')[3] )
-			eta1 = float ( l.split(' ')[3] )
-			eta2 = float ( l.split(' ')[4] )
-			sf   = float ( l.split(' ')[5] )
-			err  = float ( l.split(' ')[6] )
+			eta1 = float ( l.split(' ')[4] )
+			eta2 = float ( l.split(' ')[5] )
+			sf   = float ( l.split(' ')[6] )
+			err  = float ( l.split(' ')[7] )
 			R['pt1']=pt1
 			R['pt2']=pt2
 			R['eta1']=eta1
 			R['eta2']=eta2
+		elif type == 'spline':
+			pt = float( l.split(' ')[2])
+			sf   = float ( l.split(' ')[3] )
+			err  = float ( l.split(' ')[4] )
+			R['pt']=pt
 
 		elif type == 'base':
 			sf  = float ( l.split(' ') [2] )
@@ -215,6 +270,11 @@ def ReadSFDB(file):
 		R['sf'] =sf
 		R['err'] =err
 		L.append(R);
+
+	   except:
+		   print "Unable to parse line:"
+		   print "'" + line.replace('\n','') + "'"
+		   raise ## re-raise exception
 	return L
 
 def ReadBranches(fileName):

@@ -1,8 +1,20 @@
 #ifndef GENERAL_FUNCT_H
 #define GENERAL_FUNCT_H
 
+#ifndef NULL
+    #define NULL 0
+#endif
+
 namespace ChargedHiggs{
-    float deltaPhi(float phi1,float phi2);
+    // ---
+    float deltaPhi(const float phi1,const float phi2);
+    // --- call delete and set to null
+    template<typename T> 
+    void Delete(T& x) { delete x; x=NULL; }
+
+    float mt(const float pt1, const float pt2, const float phi1, const float phi2);
+
+
 };
 
 #endif

@@ -13,8 +13,11 @@
 #pragma link C++ class Event+ ;
 #pragma link C++ class Looper+;
 #pragma link C++ class SmearBase+;
+#pragma link C++ class CutSelector+;
 
 #pragma link C++ class Fitter+;
+#pragma link C++ class PurityFit+;
+#pragma link C++ class NegativeWeightInterpolator+;
 
 //#pragma link C++ class sigint_exception+;
 
